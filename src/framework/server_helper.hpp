@@ -112,7 +112,7 @@ public:
     if (serv.serv(a.port, a.threadnum)) {
       return 0;
     } else {
-      LOG(FATAL) << "failed starting server: any process using port " << a.port << "?";
+      LOG(FATAL) << "server failed to start: any process using port " << a.port << "?";
       return -1;
     }
   }
