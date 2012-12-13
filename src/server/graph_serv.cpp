@@ -100,7 +100,7 @@ std::string graph_serv::create_node() { /* no lock here */
       std::vector<std::pair<std::string, int> > nodes;
       find_from_cht_(nid_str, 2, nodes);
       if (nodes.empty()) {
-        throw JUBATUS_EXCEPTION(jubatus::exception::runtime_error("fatal: no server found in cht: "+nid_str));
+        throw JUBATUS_EXCEPTION(jubatus::exception::runtime_error("no server found in cht: " + argv().name));
       }
       selective_create_node_(nodes[0], nid_str);
 
@@ -110,7 +110,8 @@ std::string graph_serv::create_node() { /* no lock here */
         } catch(const graph::local_node_exists& e) { // pass through
         } catch(const graph::global_node_exists& e) {// pass through
         } catch(const std::runtime_error& e) { // error !
-          LOG(WARNING) << i+1 << "th replica: " << nodes[i].first << ":" << nodes[i].second << " " << e.what();
+          LOG(WARNING) << "cannot crate " << i << "th replica: " << nodes[i].first << ":" << nodes[i].second;
+          LOG(WARNING) << e.what();
         }
       }
     }
@@ -118,12 +119,13 @@ std::string graph_serv::create_node() { /* no lock here */
     pfi::concurrent::scoped_wlock write_lk(rw_mutex());
     this->create_node_here(nid_str);
   }
-  DLOG(INFO) << "new node created: " << nid_str;
+  DLOG(INFO) << "node created: " << nid_str;
   return nid_str;
 }
 
 int graph_serv::update_node(const std::string& id, const property& p) {
   g_.get_model()->update_node(n2i(id), p);
+  DLOG(INFO) << "node updated: " << id;
   return 0;
 }
 
@@ -149,7 +151,7 @@ int graph_serv::remove_node(const std::string& nid) {
       try {
         c.call("remove_global_node", argv().name, nid, pfi::lang::function<int(int,int)>(&jubatus::framework::add<int>));
       } catch(const common::mprpc::rpc_no_result& e) { // pass through
-        DLOG(INFO) << __func__ << " " << e.diagnostic_information(true);
+        DLOG(INFO) << e.diagnostic_information(true);
       }
     }
   }
@@ -168,7 +170,7 @@ int graph_serv::create_edge(const std::string& id, const edge_info& ei) {  /* no
     std::vector<std::pair<std::string, int> > nodes;
     find_from_cht_(ei.src, 2, nodes);
     if (nodes.empty()) {
-      throw JUBATUS_EXCEPTION(jubatus::exception::runtime_error("fatal: no server found in cht: "+ei.src));
+      throw JUBATUS_EXCEPTION(jubatus::exception::runtime_error("no server found in cht: " + argv().name));
     }
     // TODO: assertion: nodes[0] should be myself
     {
@@ -186,7 +188,8 @@ int graph_serv::create_edge(const std::string& id, const edge_info& ei) {  /* no
       } catch(const graph::local_node_exists& e) { // pass through
       } catch(const graph::global_node_exists& e) {// pass through
       } catch(const std::runtime_error& e) { // error !
-	LOG(WARNING) << nodes[i].first << ":" << nodes[i].second << " " << e.what();
+        LOG(WARNING) << "cannot create " << i << "th replica: " << nodes[i].first << ":" << nodes[i].second;
+        LOG(WARNING) << e.what();
       }
     }
   } else {
@@ -194,18 +197,20 @@ int graph_serv::create_edge(const std::string& id, const edge_info& ei) {  /* no
     this->create_edge_here(eid, ei);
   }
 
-  DLOG(INFO) << "edge created (" << eid << ") " << ei.src << " => " << ei.tgt;
+  DLOG(INFO) << "edge created: (" << eid << ") " << ei.src << " => " << ei.tgt;
   return eid;
 }
 
 //@random
 int graph_serv::update_edge(const std::string&, edge_id_t eid, const edge_info& ei) {
   g_.get_model()->update_edge(eid, ei.p);
+  DLOG(INFO) << "edge updated: (" << eid << ") " << ei.src << " => " << ei.tgt;
   return 0;
 }
 
 int graph_serv::remove_edge(const std::string&, const edge_id_t& id) {
   g_.get_model()->remove_edge(id);
+  DLOG(INFO) << "edge removed: " << id;
   return 0;
 }
 
@@ -220,7 +225,6 @@ double graph_serv::centrality(const std::string& id, const centrality_type& s,
   } else {
     std::stringstream msg;
     msg << "unknown centrality type: " << s;
-    LOG(ERROR) << msg.str();
     throw JUBATUS_EXCEPTION(jubatus::exception::runtime_error(msg.str()));
   }
 }
@@ -243,6 +247,7 @@ bool graph_serv::add_centrality_query(const preset_query& q0) {
   jubatus::graph::preset_query q;
   framework::convert<jubatus::preset_query, jubatus::graph::preset_query>(q0, q);
   g_.get_model()->add_centrality_query(q);
+  DLOG(INFO) << "centrality query added";
   return true;
 }
 
@@ -251,6 +256,7 @@ bool graph_serv::add_shortest_path_query(const preset_query& q0) {
   jubatus::graph::preset_query q;
   framework::convert<jubatus::preset_query, jubatus::graph::preset_query>(q0, q);
   g_.get_model()->add_shortest_path_query(q);
+  DLOG(INFO) << "shortest path added";
   return true;
 }
 
@@ -259,6 +265,7 @@ bool graph_serv::remove_centrality_query(const preset_query& q0) {
   jubatus::graph::preset_query q;
   framework::convert<jubatus::preset_query, jubatus::graph::preset_query>(q0, q);
   g_.get_model()->remove_centrality_query(q);
+  DLOG(INFO) << "centrality query removed";
   return true;
 }
 
@@ -267,6 +274,7 @@ bool graph_serv::remove_shortest_path_query(const preset_query& q0) {
   jubatus::graph::preset_query q;
   framework::convert<jubatus::preset_query, jubatus::graph::preset_query>(q0, q);
   g_.get_model()->remove_shortest_path_query(q);
+  DLOG(INFO) << "shortest path removed";
   return true;
 }
 
@@ -299,15 +307,15 @@ int graph_serv::update_index() {
   g_.get_model()->get_diff(diff);
   g_.get_model()->set_mixed_and_clear_diff(diff);
   clock_time end = get_clock_time();
-  LOG(INFO) << "mix done manually and locally; in " << (double)(end - start) << " secs.";
+  LOG(INFO) << "mix done manually and locally in " << (double)(end - start) << " secs.";
   return 0;
 }
 
 int graph_serv::clear() {
-  LOG(INFO) << __func__;
   if (g_.get_model()) {
     g_.get_model()->clear();
   }
+  LOG(INFO) << "model cleared:" << argv().name;
   return 0;
 }
 
@@ -332,6 +340,7 @@ int graph_serv::remove_global_node(const std::string& nid) {
   } catch(const std::runtime_error& e) {
     throw;
   }
+  DLOG(INFO) << "global node removed";
   return 0;
 } //update internal
 

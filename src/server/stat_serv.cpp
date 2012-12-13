@@ -69,6 +69,7 @@ config_data stat_serv::get_config() const {
 
 int stat_serv::push(const std::string& key, double value) {
   stat_.get_model()->push(key,value);
+  DLOG(INFO) << "pushed: " << key;
   return 0;
 }
 
